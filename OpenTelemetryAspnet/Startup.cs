@@ -2,15 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using OpenTelemetryAspnet.Models;
 
 namespace OpenTelemetryAspnet
 {
@@ -25,9 +28,17 @@ namespace OpenTelemetryAspnet
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddHttpClient();
+            services.AddEntityFrameworkSqlite();
+            services.AddDbContext<Database>();
 
             services.AddOpenTelemetryTracing((builder) => builder
                 .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("API"))
+                .AddSqlClientInstrumentation(options =>
+                {
+                    options.SetDbStatementForText = true;
+                    options.SetDbStatementForStoredProcedure = true;
+                    options.EnableConnectionLevelAttributes = true;
+                })
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
                 // .AddZipkinExporter(zipkinOptions =>
@@ -54,9 +65,20 @@ namespace OpenTelemetryAspnet
                 endpoints.MapGet("/", async context =>
                 {
                     var client = context.RequestServices.GetRequiredService<HttpClient>();
-                    var result = await client.GetStringAsync("https://dog.ceo/api/breeds/image/random");
-                    context.Response.ContentType = "application/json";
-                    await context.Response.WriteAsync(result);
+                    var database = context.RequestServices.GetRequiredService<Database>();
+                    var result = await client.GetFromJsonAsync<RandomDogResponse>("https://dog.ceo/api/breeds/image/random");
+
+                    var dog = new Dog {Url = result?.Message};
+                    database.Dogs.Add(dog);
+                    await database.SaveChangesAsync();
+
+                    var total = await database.Dogs.CountAsync();
+
+                    await context.Response.WriteAsJsonAsync(new {
+                        dog,
+                        total
+                    });
+                    
                 });
             });
         }
