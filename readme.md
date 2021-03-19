@@ -27,6 +27,12 @@ aaff1f5b17ab15d49153281ba692618a9f22a4ef483a4ec8c8ea0fa93f1b97d8
 
 If you have any other containers listening on these ports, its a good time to shut them down.
 
+Also, you might want a SQL Server instance running for this branch.
+
+```
+docker run -e 'ACCEPT_EULA=Y' -e 'SA_PASSWORD=Pass123!' -p 1433:11433 -d mcr.microsoft.com/mssql/server:2017-latest
+```
+
 2. Change the connection string in the `Database` class to point to your SQL Server instance, which can also be a docker container.
 
 3. Run the commands:
